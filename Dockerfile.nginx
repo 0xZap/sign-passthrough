@@ -1,0 +1,48 @@
+ARG NGX_VERSION=1.23.3
+ARG NGX_DEBUG=true
+
+FROM rust:slim-bullseye AS builder
+ARG NGX_VERSION
+ARG NGX_DEBUG
+WORKDIR /project
+
+RUN --mount=type=cache,target=/var/cache/apt \
+	set -eux; \
+	export DEBIAN_FRONTEND=noninteractive; \
+	apt-get -qq update; \
+	apt-get -qq install --yes --no-install-recommends --no-install-suggests \
+	libclang-dev \
+	libssl-dev \
+	pkg-config \
+	git \
+	grep \
+	gawk \
+	gnupg2 \
+	dirmngr \
+	sed \
+	make; \
+	git config --global --add safe.directory /project
+
+COPY Cargo.toml Cargo.lock ./
+COPY src/ ./src/
+
+RUN --mount=type=cache,id=cargo,target=/usr/local/cargo/registry \
+	cargo fetch --locked
+
+RUN --mount=type=cache,id=target,target=target \
+	--mount=type=cache,id=cache,target=.cache \
+	--mount=type=cache,id=cargo,target=/usr/local/cargo/registry \
+	mkdir -p /out && \
+	cargo build --release && \
+	cp target/release/*.so /out/
+
+FROM nginx:${NGX_VERSION}
+ARG NGX_VERSION
+
+RUN mkdir -p /etc/nginx/modules
+
+COPY --from=builder /out/*.so /etc/nginx/modules/
+
+EXPOSE 443
+
+CMD ["nginx"]
