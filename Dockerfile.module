@@ -1,0 +1,17 @@
+FROM alpine:latest AS builder
+
+RUN apk add --no-cache build-base openssl-dev pcre-dev zlib-dev wget
+
+RUN wget http://nginx.org/download/nginx-1.27.2.tar.gz && \
+	tar -zxvf nginx-1.27.2.tar.gz && \
+	rm nginx-1.27.2.tar.gz
+
+COPY src/ngx_http_sign_module.c /nginx-1.27.2/modules/ngx_http_sign_module.c
+COPY src/config /nginx-1.27.2/modules/config
+
+RUN cd /nginx-1.27.2 && \
+	./configure --with-compat --add-dynamic-module=modules && \
+	make modules
+
+RUN mkdir -p /sign-module
+RUN cp /nginx-1.27.2/objs/ngx_http_sign_module.so /sign-module/
